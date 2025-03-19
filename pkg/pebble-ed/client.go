@@ -58,15 +58,6 @@ func (f *MyABCIAppClientFactory) ValidateConfig(cfg loadtest.Config) error {
 	if maxTxsPerEndpoint < 1 {
 		return fmt.Errorf("cannot calculate an appropriate maximum number of transactions per endpoint (got %d)", maxTxsPerEndpoint)
 	}
-	minKeySuffixLen, err := requiredKVStoreSuffixLen(maxTxsPerEndpoint)
-	if err != nil {
-		return err
-	}
-	// "[client_id][random_suffix]=[value]"
-	minTxSize := KVStoreClientIDLen + minKeySuffixLen + 1 + kvstoreMinValueLen
-	if cfg.Size < minTxSize {
-		return fmt.Errorf("transaction size %d is too small for given parameters (should be at least %d bytes)", cfg.Size, minTxSize)
-	}
 	return nil
 }
 
@@ -78,19 +69,6 @@ func (f *MyABCIAppClientFactory) NewClient(cfg loadtest.Config) (loadtest.Client
 		txCounter: 0,
 		senders:   senderIds,
 	}, nil
-}
-
-func requiredKVStoreSuffixLen(maxTxCount uint64) (int, error) {
-	for l, maxTxs := range kvstoreMaxTxsByKeySuffixLen {
-		if maxTxCount < maxTxs {
-			if l+1 > len(kvstoreMaxTxsByKeySuffixLen) {
-				return -1, fmt.Errorf("cannot cater for maximum tx count of %d (too many unique transactions, suffix length %d)", maxTxCount, l+1)
-			}
-			// we use l+1 to minimize collision probability
-			return l + 1, nil
-		}
-	}
-	return -1, fmt.Errorf("cannot cater for maximum tx count of %d (too many unique transactions)", maxTxCount)
 }
 
 var privateKeyMap = map[string]string{
@@ -112,11 +90,8 @@ type Transfer struct {
 func (t *Transfer) Challenge() []byte {
     challenge := []byte{}
     challenge = append(challenge, []byte(t.Id)...)
-    challenge = append(challenge, []byte("=")...)
     challenge = append(challenge, []byte(t.Sender)...)
-    challenge = append(challenge, []byte("=")...)
     challenge = append(challenge, []byte(t.Dest)...)
-    challenge = append(challenge, []byte("=")...)
     challenge = append(challenge, []byte(t.Amount)...)
     return challenge
 }
@@ -171,7 +146,6 @@ func (c *MyABCIAppClient) GenerateTx() ([]byte, error) {
 			transfer.Signature)
 			txData += ":"
 	}
-	txData = txData[:len(txData)-1]
-    fmt.Println(txData)
+	txData = txData[:len(txData)-1] 
     return []byte(txData), nil
 }
