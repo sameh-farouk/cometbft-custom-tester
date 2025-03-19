@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/cometbft/cometbft-load-test/pkg/loadtest"
-	myabciapp "github.com/sameh-farouk/cometbft-custom-tester/pkg/pebble-ed"
+	myabciapp "github.com/sameh-farouk/cometbft-custom-tester/pkg/ed"
 )
 
 func main() {
