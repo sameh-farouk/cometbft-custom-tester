@@ -64,6 +64,13 @@ func (f *MyABCIAppClientFactory) ValidateConfig(cfg loadtest.Config) error {
 func (f *MyABCIAppClientFactory) NewClient(cfg loadtest.Config) (loadtest.Client, error) {
 	batchSize := cfg.Size
 	senderIds := []string{"1", "2", "3", "4"}
+	for _, val := range senderIds {
+		privKeyBytes, err := hex.DecodeString(privateKeyMap[val])
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode private key: %v", err)
+		}
+		edPrivateKeyMap[val] = ed25519.PrivateKey(privKeyBytes)
+	}
 	return &MyABCIAppClient{
 		batchSize: batchSize,
 		txCounter: 0,
@@ -77,7 +84,7 @@ var privateKeyMap = map[string]string{
     "3": "376384a0c4d4ef4e95bf980acea6ec6d7b8bbdaa06d91ca68383d018e885dda204c01c7d4f6c784504fce83f97968145e8aa6ca461ec19f3a685466152f17644" ,
     "4": "7403b7706deba2d8d036d00c5e1e087542fff733b1b3f1b776bf2fa64bcd5d98d06a22ce4b7a59ceac3a898504901f41e27491ed3cc90e8ee46ac43e9305d61a",
 }
-
+var edPrivateKeyMap = map[string]ed25519.PrivateKey{}
 type Transfer struct {
     Id        string `json:"id"`
     Sender    string `json:"sender"`
@@ -96,6 +103,7 @@ func (t *Transfer) Challenge() []byte {
     return challenge
 }
 
+
 // GenerateTx must return the raw bytes that make up the transaction for your
 // ABCI app. The conversion to base64 will automatically be handled by the
 // loadtest package, so don't worry about that. Only return an error here if you
@@ -103,21 +111,16 @@ func (t *Transfer) Challenge() []byte {
 func (c *MyABCIAppClient) GenerateTx() ([]byte, error) {
 	n := c.batchSize
 	txData := ""
-	for range n {
+	for i := 0; i < n; i++ {
 		c.txCounter++
 		senderIdx := rand.Intn(len(c.senders))
 		sender := c.senders[senderIdx]
 		
 		var dest string
-		for {
-			destIdx := rand.Intn(len(c.senders))
-			dest = c.senders[destIdx]
-			if dest != sender {
-				break
-			}
-		}
+		destIdx := rand.Intn(len(c.senders))
+		dest = c.senders[destIdx]
 		
-		amount := rand.Intn(500) + 1
+		amount := 1
 		
 		transfer := Transfer{
 			Id:     strconv.Itoa(c.txCounter),
@@ -128,13 +131,7 @@ func (c *MyABCIAppClient) GenerateTx() ([]byte, error) {
 		
 		challenge := transfer.Challenge()
 		
-		privKeyHex := privateKeyMap[sender]
-		privKeyBytes, err := hex.DecodeString(privKeyHex)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode private key: %v", err)
-		}
-		
-		privateKey := ed25519.PrivateKey(privKeyBytes)
+		privateKey := edPrivateKeyMap[sender]
 		signature := ed25519.Sign(privateKey, challenge)
 		
 		transfer.Signature = hex.EncodeToString(signature)
@@ -144,8 +141,9 @@ func (c *MyABCIAppClient) GenerateTx() ([]byte, error) {
 			transfer.Dest, 
 			transfer.Amount, 
 			transfer.Signature)
+		if i != n-1 {
 			txData += ":"
+		}
 	}
-	txData = txData[:len(txData)-1] 
     return []byte(txData), nil
 }
